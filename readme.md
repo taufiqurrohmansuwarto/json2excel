@@ -158,6 +158,119 @@ export default function UsersPage() {
 }
 ```
 
+## 📦 Node.js dengan Axios
+
+### 1. Instalasi Dependencies
+
+```bash
+npm install axios
+```
+
+### 2. Contoh Penggunaan
+
+```javascript
+const axios = require('axios');
+const fs = require('fs');
+
+const EXCEL_SERVICE_URL = 'http://localhost:3001';
+
+// Generate Excel dengan data
+async function generateExcel(data, options = {}) {
+  try {
+    const response = await axios.post(`${EXCEL_SERVICE_URL}/generate-excel`, {
+      data: data,
+      options: {
+        filename: 'export.xlsx',
+        sheet_name: 'Data Export',
+        headers: null,
+        ...options
+      }
+    }, {
+      responseType: 'arraybuffer',
+      timeout: 120000,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    return Buffer.from(response.data);
+  } catch (error) {
+    console.error('Error:', error.message);
+    throw error;
+  }
+}
+
+// Contoh data
+const sampleData = [
+  {
+    id: 1,
+    name: 'John Doe',
+    email: 'john@example.com',
+    phone: '+6281234567890',
+    city: 'Jakarta',
+    status: 'active',
+    salary: 15000000
+  },
+  {
+    id: 2,
+    name: 'Jane Smith',
+    email: 'jane@example.com',
+    phone: '+6281234567891',
+    city: 'Surabaya',
+    status: 'active',
+    salary: 18000000
+  }
+];
+
+// Eksekusi
+async function main() {
+  try {
+    // Cek health service
+    const health = await axios.get(`${EXCEL_SERVICE_URL}/health`);
+    console.log('Service status:', health.data);
+
+    // Generate Excel
+    const excelBuffer = await generateExcel(sampleData, {
+      filename: 'users_export.xlsx',
+      sheet_name: 'Users Data'
+    });
+    
+    // Simpan file
+    fs.writeFileSync('./output.xlsx', excelBuffer);
+    console.log('✅ Excel file berhasil dibuat: output.xlsx');
+    
+  } catch (error) {
+    console.error('❌ Error:', error.message);
+  }
+}
+
+main();
+```
+
+### 3. Contoh untuk Dataset Besar
+
+```javascript
+// Generate 10,000 records
+const largeData = [];
+for (let i = 1; i <= 10000; i++) {
+  largeData.push({
+    id: i,
+    name: `User ${i}`,
+    email: `user${i}@example.com`,
+    city: i % 2 === 0 ? 'Jakarta' : 'Surabaya',
+    status: i % 3 === 0 ? 'inactive' : 'active',
+    salary: 10000000 + (i * 1000)
+  });
+}
+
+// Process large dataset
+const excelBuffer = await generateExcel(largeData, {
+  filename: 'large_dataset.xlsx',
+  sheet_name: 'Large Data'
+});
+
+fs.writeFileSync('./large_output.xlsx', excelBuffer);
+console.log('✅ Large dataset processed successfully!');
+```
+
 ## 📊 Performance Benchmarks
 
 | Dataset Size | Node.js ExcelJS | Rust Service | Improvement |
