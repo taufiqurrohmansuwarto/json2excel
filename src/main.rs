@@ -176,29 +176,8 @@ fn json_to_excel_row_optimized(record: &Value, headers: &[String]) -> Vec<CellVa
         match &record[header] {
             Value::Null => CellValue::Empty,
             Value::Bool(b) => CellValue::Bool(*b),
-            Value::Number(n) => {
-                if let Some(i) = n.as_i64() {
-                    CellValue::Integer(i)
-                } else if let Some(f) = n.as_f64() {
-                    CellValue::Float(f)
-                } else {
-                    CellValue::String(n.to_string())
-                }
-            },
-            Value::String(s) => {
-                // Try to detect numbers in strings for better performance
-                if let Ok(f) = s.parse::<f64>() {
-                    if s.contains('.') {
-                        CellValue::Float(f)
-                    } else if let Ok(i) = s.parse::<i64>() {
-                        CellValue::Integer(i)
-                    } else {
-                        CellValue::Float(f)
-                    }
-                } else {
-                    CellValue::String(s.clone())
-                }
-            },
+            Value::Number(n) => CellValue::String(n.to_string()),
+            Value::String(s) => CellValue::String(s.clone()),
             Value::Array(_) => CellValue::String("[Array]".to_string()),
             Value::Object(_) => CellValue::String("[Object]".to_string()),
         }
@@ -230,18 +209,20 @@ async fn health_handler() -> Result<impl warp::Reply, Infallible> {
 async fn test_handler() -> Result<impl warp::Reply, warp::Rejection> {
     info!("🧪 Test endpoint called");
     
-    // Generate sample data
+    // Generate sample data with NIP
     let sample_data = vec![
         serde_json::json!({
             "id": 1,
             "name": "John Doe",
+            "nip": "199103052019031008",
             "email": "john@example.com",
             "age": 30,
             "city": "Jakarta"
         }),
         serde_json::json!({
             "id": 2,
-            "name": "Jane Smith",
+            "name": "Jane Smith", 
+            "nip": "198712142020121005",
             "email": "jane@example.com",
             "age": 25,
             "city": "Surabaya"
