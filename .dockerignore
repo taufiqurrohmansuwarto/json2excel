@@ -1,0 +1,8 @@
+target/
+Cargo.lock
+.git
+.gitignore
+.env
+readme.md
+test.xlsx
+.claude/

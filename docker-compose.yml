@@ -1,0 +1,50 @@
+services:
+  excel-service:
+    build: 
+      context: .
+      dockerfile: Dockerfile.simple
+    container_name: excel-service
+    ports:
+      - "3333:3333"
+    environment:
+      - RUST_LOG=info
+      - PORT=3333
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3333/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - excel-network
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
+        reservations:
+          memory: 256M
+          cpus: "0.5"
+
+networks:
+  excel-network:
+    driver: bridge
+# Optional: Jika mau include Redis untuk caching
+# redis:
+#   image: redis:7-alpine
+#   container_name: excel-redis
+#   ports:
+#     - "6379:6379"
+#   networks:
+#     - excel-network
+
+# Optional: Monitoring dengan Prometheus
+# prometheus:
+#   image: prom/prometheus
+#   container_name: excel-prometheus
+#   ports:
+#     - "9090:9090"
+#   networks:
+#     - excel-network
