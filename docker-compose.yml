@@ -9,6 +9,10 @@ services:
     environment:
       - RUST_LOG=info
       - PORT=3333
+      - EXCEL_CHUNK_SIZE=5000
+      - EXCEL_MAX_MEMORY_MB=6144
+      - EXCEL_MAX_BODY_SIZE_MB=2048
+      - RUST_MIN_STACK=16777216
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3333/health"]
@@ -18,15 +22,15 @@ services:
       start_period: 40s
     networks:
       - excel-network
-    # Resource limits
+    # Resource limits optimized for 24GB server
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: "2.0"
+          memory: 8G
+          cpus: "6.0"
         reservations:
-          memory: 256M
-          cpus: "0.5"
+          memory: 1G
+          cpus: "1.0"
 
 networks:
   excel-network:

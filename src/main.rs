@@ -100,11 +100,16 @@ async fn generate_excel_file(req: ExportRequest) -> anyhow::Result<Vec<u8>> {
     info!("📝 Writing {} data rows...", req.data.len());
     
     // Process data in chunks for better memory management
-    const CHUNK_SIZE: usize = 1000;
+    let chunk_size = std::env::var("EXCEL_CHUNK_SIZE")
+        .unwrap_or_else(|_| "5000".to_string())
+        .parse::<usize>()
+        .unwrap_or(5000);
     let total_rows = req.data.len();
     
-    for chunk_start in (0..total_rows).step_by(CHUNK_SIZE) {
-        let chunk_end = std::cmp::min(chunk_start + CHUNK_SIZE, total_rows);
+    info!("🔧 Using chunk size: {} for {} total rows", chunk_size, total_rows);
+    
+    for chunk_start in (0..total_rows).step_by(chunk_size) {
+        let chunk_end = std::cmp::min(chunk_start + chunk_size, total_rows);
         let chunk = &req.data[chunk_start..chunk_end];
         
         // Pre-process chunk untuk type detection
@@ -375,10 +380,16 @@ async fn main() {
         .and(warp::get())
         .and_then(test_handler);
     
+    // Get max body size from environment (default 2GB for 24GB server)
+    let max_body_size = std::env::var("EXCEL_MAX_BODY_SIZE_MB")
+        .unwrap_or_else(|_| "2048".to_string())
+        .parse::<u64>()
+        .unwrap_or(2048) * 1024 * 1024;
+
     // Main Excel generation route
     let generate = warp::path("generate-excel")
         .and(warp::post())
-        .and(warp::body::content_length_limit(1024 * 1024 * 500)) // 500MB limit for large datasets
+        .and(warp::body::content_length_limit(max_body_size)) // Configurable limit
         .and(warp::body::json())
         .and_then(generate_excel_handler);
     
@@ -386,7 +397,7 @@ async fn main() {
     let csv_to_excel = warp::path("csv-to-excel")
         .and(warp::post())
         .and(warp::header::exact("content-type", "text/csv"))
-        .and(warp::body::content_length_limit(1024 * 1024 * 100)) // 100MB limit for CSV
+        .and(warp::body::content_length_limit(max_body_size / 2)) // Half for CSV
         .and(warp::body::bytes())
         .map(|bytes: bytes::Bytes| String::from_utf8_lossy(&bytes).to_string())
         .and_then(csv_to_excel_handler);
@@ -420,6 +431,10 @@ async fn main() {
         .unwrap_or(3333);
     
     info!("🦀 Excel Service running on http://0.0.0.0:{}", port);
+    info!("🔧 Configuration:");
+    info!("   - Chunk size: {}", std::env::var("EXCEL_CHUNK_SIZE").unwrap_or("5000".to_string()));
+    info!("   - Max body size: {}MB", max_body_size / (1024 * 1024));
+    info!("   - Memory limit: {}MB", std::env::var("EXCEL_MAX_MEMORY_MB").unwrap_or("6144".to_string()));
     info!("📋 Available endpoints:");
     info!("   GET  /health        - Health check");
     info!("   GET  /test          - Test with sample data");
