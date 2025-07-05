@@ -6,6 +6,7 @@ use serde_json::Value;
 use xlsxwriter::*;
 use xlsxwriter::prelude::*;
 use log::{info, error};
+use csv::Reader;
 
 #[derive(Deserialize, Debug)]
 struct ExportRequest {
@@ -205,6 +206,72 @@ async fn health_handler() -> Result<impl warp::Reply, Infallible> {
     Ok(warp::reply::json(&response))
 }
 
+// CSV to Excel handler
+async fn csv_to_excel_handler(csv_data: String) -> Result<impl warp::Reply, warp::Rejection> {
+    let start_time = std::time::Instant::now();
+    
+    info!("🦀 Starting CSV to Excel conversion");
+    
+    match convert_csv_to_excel(csv_data).await {
+        Ok(excel_data) => {
+            let duration = start_time.elapsed();
+            info!("✅ CSV to Excel conversion completed in {:?}", duration);
+            
+            Ok(warp::reply::with_header(
+                excel_data,
+                "content-type",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ))
+        }
+        Err(e) => {
+            error!("❌ CSV to Excel conversion failed: {}", e);
+            Err(warp::reject::custom(ExcelError::GenerationFailed(e.to_string())))
+        }
+    }
+}
+
+// Convert CSV to Excel
+async fn convert_csv_to_excel(csv_content: String) -> anyhow::Result<Vec<u8>> {
+    info!("📝 Parsing CSV content");
+    
+    // Parse CSV
+    let mut reader = Reader::from_reader(csv_content.as_bytes());
+    let mut records = Vec::new();
+    let mut headers = Vec::new();
+    
+    // Get headers
+    if let Ok(header_record) = reader.headers() {
+        headers = header_record.iter().map(|h| h.to_string()).collect();
+    }
+    
+    // Get all records
+    for result in reader.records() {
+        let record = result?;
+        let mut row_data = HashMap::new();
+        
+        for (i, field) in record.iter().enumerate() {
+            if let Some(header) = headers.get(i) {
+                row_data.insert(header.clone(), Value::String(field.to_string()));
+            }
+        }
+        records.push(Value::Object(serde_json::Map::from_iter(row_data)));
+    }
+    
+    info!("📊 Parsed {} records with {} columns", records.len(), headers.len());
+    
+    // Create Excel using existing function
+    let req = ExportRequest {
+        data: records,
+        options: ExportOptions {
+            filename: "converted.xlsx".to_string(),
+            sheet_name: Some("Sheet1".to_string()),
+            headers: Some(headers),
+        },
+    };
+    
+    generate_excel_file(req).await
+}
+
 // Test endpoint untuk cek service
 async fn test_handler() -> Result<impl warp::Reply, warp::Rejection> {
     info!("🧪 Test endpoint called");
@@ -315,6 +382,15 @@ async fn main() {
         .and(warp::body::json())
         .and_then(generate_excel_handler);
     
+    // CSV to Excel route
+    let csv_to_excel = warp::path("csv-to-excel")
+        .and(warp::post())
+        .and(warp::header::exact("content-type", "text/csv"))
+        .and(warp::body::content_length_limit(1024 * 1024 * 100)) // 100MB limit for CSV
+        .and(warp::body::bytes())
+        .map(|bytes: bytes::Bytes| String::from_utf8_lossy(&bytes).to_string())
+        .and_then(csv_to_excel_handler);
+    
     // Status endpoint
     let status = warp::path("status")
         .and(warp::get())
@@ -332,6 +408,7 @@ async fn main() {
     let routes = health
         .or(test)
         .or(generate)
+        .or(csv_to_excel)
         .or(status)
         .with(cors())
         .recover(handle_rejection)
@@ -348,6 +425,7 @@ async fn main() {
     info!("   GET  /test          - Test with sample data");
     info!("   GET  /status        - Service status");
     info!("   POST /generate-excel - Generate Excel file");
+    info!("   POST /csv-to-excel  - Convert CSV to Excel (Content-Type: text/csv)");
     
     warp::serve(routes)
         .run(([0, 0, 0, 0], port))
