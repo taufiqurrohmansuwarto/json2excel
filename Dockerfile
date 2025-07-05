@@ -1,5 +1,5 @@
 # Multi-stage build untuk optimasi ukuran image
-FROM rust:1.81 AS builder
+FROM rust:latest AS builder
 
 # Install dependencies yang dibutuhkan untuk compile
 RUN apt-get update && apt-get install -y \
