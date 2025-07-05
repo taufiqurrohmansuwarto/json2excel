@@ -8,7 +8,11 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libclang-dev \
     clang \
+    musl-tools \
     && rm -rf /var/lib/apt/lists/*
+
+# Add musl target for static linking
+RUN rustup target add x86_64-unknown-linux-musl
 
 # Set working directory
 WORKDIR /app
@@ -19,8 +23,8 @@ COPY Cargo.toml ./
 # Copy source code
 COPY src ./src
 
-# Build for release
-RUN cargo build --release
+# Build for release with musl target for static linking
+RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # Runtime stage
 FROM debian:bullseye-slim
@@ -39,7 +43,7 @@ RUN useradd -r -s /bin/false appuser
 WORKDIR /app
 
 # Copy binary from builder stage
-COPY --from=builder /app/target/release/excel-service ./excel-service
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/excel-service ./excel-service
 
 # Change ownership
 RUN chown appuser:appuser /app/excel-service
