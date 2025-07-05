@@ -1,63 +1,46 @@
 # 🦀 Rust Excel Service
 
-High-performance Excel generation service built with Rust, designed to handle large datasets (65k+ records) with 50+ columns efficiently.
+Layanan generasi Excel berkinerja tinggi yang dibangun dengan Rust, dirancang untuk menangani dataset besar (65k+ records) dengan 50+ kolom secara efisien.
 
-## ✨ Features
+## ✨ Fitur
 
-- **🚀 Ultra Fast**: 5-10x faster than Node.js solutions
-- **💾 Memory Efficient**: Uses 5-8x less memory than traditional approaches
-- **📊 Large Dataset Support**: Handle 65k+ records without crashes
-- **🔄 Auto-Detection**: Automatically detects JSON structure (no need to define 50+ fields)
-- **🐳 Docker Ready**: Containerized for easy deployment
-- **📈 Progress Tracking**: Built-in monitoring and logging
-- **🛡️ Error Handling**: Robust error handling and recovery
+- **🚀 Sangat Cepat**: 5-10x lebih cepat dari solusi Node.js
+- **💾 Hemat Memori**: Menggunakan 5-8x lebih sedikit memori
+- **📊 Mendukung Dataset Besar**: Menangani 65k+ records tanpa crash
+- **🔄 Auto-Detection**: Otomatis mendeteksi struktur JSON
+- **📄 CSV ke Excel**: Konversi file CSV ke format Excel
+- **🔢 Preservasi Data**: Semua data disimpan sebagai text untuk mempertahankan format seperti NIP
+- **📈 Progress Tracking**: Monitoring dan logging terintegrasi
+- **🛡️ Error Handling**: Penanganan error yang robust
 
-## 🏗️ Architecture
-
-```
-NextJS Frontend → NextJS API Route → Rust Excel Service → Excel File
-```
-
-## 📋 Prerequisites
-
-- Docker & Docker Compose
-- Node.js 18+ (for NextJS integration)
-- Rust 1.75+ (if building locally)
-
-## 🚀 Quick Start
+## 🚀 Instalasi
 
 ### 1. Clone & Build
 
 ```bash
-# Clone the repository
-git clone <your-repo>
-cd excel-service
-
-# Make scripts executable
-chmod +x scripts/build.sh
-
-# Build and start the service
-./scripts/build.sh
+git clone <repository-url>
+cd rust-download-excel
+cargo build --release
 ```
 
-### 2. Verify Service
+### 2. Menjalankan Service
 
 ```bash
-# Check if service is running
-curl http://localhost:3001/health
+# Jalankan service
+cargo run
 
-# Test with sample data
-curl http://localhost:3001/test --output test.xlsx
+# Atau dengan port khusus
+PORT=3333 cargo run
 ```
 
-### 3. Run Tests
+### 3. Verifikasi Service
 
 ```bash
-# Install Node.js dependencies for testing
-npm install node-fetch
+# Cek status service
+curl http://localhost:3333/health
 
-# Run comprehensive tests
-node test/test-service.js
+# Test dengan data sample
+curl http://localhost:3333/test --output test.xlsx
 ```
 
 ## 📡 API Endpoints
@@ -68,17 +51,7 @@ node test/test-service.js
 GET /health
 ```
 
-Response:
-
-```json
-{
-  "status": "healthy",
-  "service": "excel-service",
-  "version": "0.1.0"
-}
-```
-
-### Generate Excel
+### Generate Excel dari JSON
 
 ```http
 POST /generate-excel
@@ -89,9 +62,8 @@ Content-Type: application/json
     {
       "id": 1,
       "name": "John Doe",
-      "email": "john@example.com",
-      "field_4": "any value",
-      "field_5": "another value"
+      "nip": "199103052019031008",
+      "email": "john@example.com"
     }
   ],
   "options": {
@@ -100,6 +72,28 @@ Content-Type: application/json
     "headers": null
   }
 }
+```
+
+### Convert CSV ke Excel
+
+```http
+POST /csv-to-excel
+Content-Type: text/csv
+
+id,name,nip,email
+1,John Doe,199103052019031008,john@example.com
+2,Jane Smith,198712142020121005,jane@example.com
+```
+
+Contoh penggunaan:
+
+```bash
+# Convert file CSV ke Excel
+curl -X POST \
+  -H "Content-Type: text/csv" \
+  --data-binary @data.csv \
+  http://localhost:3333/csv-to-excel \
+  -o output.xlsx
 ```
 
 ### Service Status
@@ -114,104 +108,185 @@ GET /status
 GET /test
 ```
 
-## 🔧 NextJS Integration
+## 🔧 Contoh Penggunaan dengan Node.js
 
-### 1. API Route (`pages/api/export-excel.js`)
+### 1. Generate Excel dari JSON
 
 ```javascript
-export default async function handler(req, res) {
-  const { filters, options } = req.body;
+const axios = require('axios');
+const fs = require('fs');
 
-  // Fetch data from your database
-  const data = await fetchUsersData(filters);
+async function generateExcel() {
+  try {
+    const data = [
+      {
+        id: 1,
+        name: "John Doe",
+        nip: "199103052019031008",
+        email: "john@example.com",
+        department: "IT"
+      },
+      {
+        id: 2,
+        name: "Jane Smith",
+        nip: "198712142020121005",
+        email: "jane@example.com",
+        department: "HR"
+      }
+    ];
 
-  // Send to Rust service
-  const response = await fetch("http://localhost:3001/generate-excel", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ data, options }),
-  });
+    const response = await axios.post('http://localhost:3333/generate-excel', {
+      data: data,
+      options: {
+        filename: "employees.xlsx",
+        sheet_name: "Employees",
+        headers: null
+      }
+    }, {
+      responseType: 'arraybuffer'
+    });
 
-  // Return Excel file
-  const excelBuffer = await response.arrayBuffer();
-  res.setHeader(
-    "Content-Type",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  );
-  res.send(Buffer.from(excelBuffer));
+    // Simpan ke file
+    fs.writeFileSync('employees.xlsx', response.data);
+    console.log('Excel file berhasil dibuat: employees.xlsx');
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
 }
+
+generateExcel();
 ```
 
-### 2. Frontend Component
+### 2. Convert CSV ke Excel
 
-```jsx
-import ExcelExportButton from "../components/ExcelExportButton";
+```javascript
+const axios = require('axios');
+const fs = require('fs');
 
-export default function UsersPage() {
-  const filters = { status: "active", startDate: "2024-01-01" };
+async function convertCsvToExcel() {
+  try {
+    // Baca file CSV
+    const csvData = fs.readFileSync('data.csv', 'utf8');
 
-  return (
-    <div>
-      <ExcelExportButton filters={filters} />
-    </div>
-  );
+    const response = await axios.post('http://localhost:3333/csv-to-excel', csvData, {
+      headers: {
+        'Content-Type': 'text/csv'
+      },
+      responseType: 'arraybuffer'
+    });
+
+    // Simpan ke file Excel
+    fs.writeFileSync('converted.xlsx', response.data);
+    console.log('CSV berhasil dikonversi ke Excel: converted.xlsx');
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
 }
+
+convertCsvToExcel();
 ```
 
-## Performance Benchmarks
+### 3. Contoh API Route di Express.js
 
-| Dataset Size | Node.js ExcelJS | Rust Service | Improvement |
-| ------------ | --------------- | ------------ | ----------- |
-| 1k records   | 0.8s            | 0.2s         | 4x faster   |
-| 10k records  | 4.2s            | 0.8s         | 5x faster   |
-| 65k records  | 25s (or crash)  | 3.2s         | 8x faster   |
+```javascript
+const express = require('express');
+const axios = require('axios');
+const app = express();
 
-| Metric       | Node.js | Rust   | Improvement        |
-| ------------ | ------- | ------ | ------------------ |
-| Memory Usage | ~3.5GB  | ~400MB | 8x less            |
-| Success Rate | 60%     | 99.9%  | Much more reliable |
+app.use(express.json());
 
-## 🐳 Docker Configuration
+app.post('/api/export-excel', async (req, res) => {
+  try {
+    const { data, options } = req.body;
 
-### Build Image
+    // Kirim ke Rust service
+    const response = await axios.post('http://localhost:3333/generate-excel', {
+      data,
+      options
+    }, {
+      responseType: 'arraybuffer'
+    });
 
-```bash
-docker build -t excel-service:latest .
+    // Set headers untuk download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${options.filename || 'export.xlsx'}"`);
+    
+    // Kirim file Excel
+    res.send(Buffer.from(response.data));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.listen(3000, () => {
+  console.log('Server berjalan di port 3000');
+});
 ```
 
-### Run Container
+### 4. Contoh dengan Error Handling
 
-```bash
-docker run -p 3001:3001 excel-service:latest
+```javascript
+const axios = require('axios');
+const fs = require('fs');
+
+async function exportWithErrorHandling(data) {
+  try {
+    // Validasi data
+    if (!data || data.length === 0) {
+      throw new Error('Data tidak boleh kosong');
+    }
+
+    const response = await axios.post('http://localhost:3333/generate-excel', {
+      data: data,
+      options: {
+        filename: "export.xlsx",
+        sheet_name: "Data",
+        headers: null
+      }
+    }, {
+      responseType: 'arraybuffer',
+      timeout: 30000 // 30 detik timeout
+    });
+
+    // Simpan file
+    const filename = `export_${new Date().toISOString().split('T')[0]}.xlsx`;
+    fs.writeFileSync(filename, response.data);
+    
+    console.log(`✅ Excel berhasil dibuat: ${filename}`);
+    return filename;
+  } catch (error) {
+    if (error.response) {
+      console.error('❌ Error dari server:', error.response.status, error.response.data);
+    } else if (error.request) {
+      console.error('❌ Tidak bisa menghubungi server');
+    } else {
+      console.error('❌ Error:', error.message);
+    }
+    throw error;
+  }
+}
+
+// Contoh penggunaan
+const sampleData = [
+  { id: 1, name: "Test User", nip: "123456789012345678", email: "test@example.com" }
+];
+
+exportWithErrorHandling(sampleData);
 ```
 
-### Docker Compose
-
-```bash
-docker-compose up -d
-```
-
-## 🔧 Configuration
+## 🔧 Konfigurasi
 
 ### Environment Variables
 
 ```bash
 # .env
 RUST_LOG=info           # Log level
-PORT=3001              # Service port
+PORT=3333              # Service port
 ```
 
-### Docker Compose Environment
+## 📝 Format Data
 
-```yaml
-environment:
-  - RUST_LOG=info
-  - PORT=3001
-```
-
-## 📝 Data Format
-
-The service accepts any JSON structure. Here's an example with 50+ fields:
+Service ini menerima struktur JSON apapun:
 
 ```json
 {
@@ -219,20 +294,14 @@ The service accepts any JSON structure. Here's an example with 50+ fields:
     {
       "id": 1,
       "name": "John Doe",
+      "nip": "199103052019031008",
       "email": "john@example.com",
       "phone": "+1234567890",
       "address": "123 Main St",
       "city": "Jakarta",
-      "country": "Indonesia",
       "status": "active",
       "age": 30,
-      "gender": "Male",
-      "occupation": "Engineer",
-      "salary": 5000000,
-      "department": "IT",
-      "field_14": "value_14",
-      "field_15": "value_15",
-      "field_50": "value_50"
+      "department": "IT"
     }
   ],
   "options": {
@@ -245,38 +314,42 @@ The service accepts any JSON structure. Here's an example with 50+ fields:
 
 ## 🔍 Monitoring
 
-### Check Service Status
+### Cek Status Service
 
 ```bash
-curl http://localhost:3001/status
+curl http://localhost:3333/status
 ```
 
 ### View Logs
 
 ```bash
-# Docker logs
-docker-compose logs -f excel-service
+# Jika menggunakan systemd
+journalctl -u excel-service -f
 
-# Direct container logs
-docker logs excel-service
+# Atau langsung dari terminal
+RUST_LOG=info cargo run
 ```
 
-### Memory Usage
+## 🐛 Troubleshooting
 
-The service automatically reports memory usage in status endpoint on Linux systems.
+### Service Tidak Bisa Start
+
+1. Cek port yang digunakan: `lsof -i :3333`
+2. Pastikan tidak ada service lain di port yang sama
+3. Cek log error saat startup
+
+### Memory Issues
+
+1. Monitor penggunaan memori dengan `htop`
+2. Untuk dataset sangat besar (>100k records), pertimbangkan untuk membagi data
+
+### File Excel Corrupt
+
+1. Verifikasi struktur JSON data
+2. Pastikan tidak ada karakter khusus yang bermasalah
+3. Pastikan Content-Type header benar
 
 ## 🛠️ Development
-
-### Local Development (Without Docker)
-
-```bash
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Build and run
-cargo build --release
-cargo run
-```
 
 ### Testing
 
@@ -284,102 +357,21 @@ cargo run
 # Unit tests
 cargo test
 
-# Integration tests
-node test/test-service.js
-
 # Load testing
-for i in {1..10}; do curl http://localhost:3001/test --output test_$i.xlsx; done
+for i in {1..10}; do curl http://localhost:3333/test --output test_$i.xlsx; done
 ```
 
-## 🐛 Troubleshooting
-
-### Service Won't Start
-
-1. Check Docker is running: `docker ps`
-2. Check port availability: `lsof -i :3001`
-3. Check logs: `docker-compose logs excel-service`
-
-### Memory Issues
-
-1. Increase Docker memory limit in docker-compose.yml
-2. Check system resources: `docker stats excel-service`
-
-### Large Dataset Timeouts
-
-1. Increase request timeout in your HTTP client
-2. Consider chunking very large datasets (>100k records)
-
-### Excel File Corruption
-
-1. Verify JSON data structure
-2. Check for special characters in data
-3. Ensure proper Content-Type headers
-
-## 📈 Scaling
-
-### Horizontal Scaling
-
-```yaml
-# docker-compose.yml
-services:
-  excel-service:
-    deploy:
-      replicas: 3
-
-  nginx:
-    image: nginx
-    # Load balancer configuration
-```
-
-### Vertical Scaling
-
-```yaml
-# Increase resources
-deploy:
-  resources:
-    limits:
-      memory: 2G
-      cpus: "4.0"
-```
-
-## 🚀 Production Deployment
-
-### Docker Swarm
+### Build untuk Production
 
 ```bash
-docker stack deploy -c docker-compose.yml excel-stack
-```
-
-### Kubernetes
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: excel-service
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: excel-service
-  template:
-    metadata:
-      labels:
-        app: excel-service
-    spec:
-      containers:
-        - name: excel-service
-          image: excel-service:latest
-          ports:
-            - containerPort: 3001
+cargo build --release
 ```
 
 ## 📞 Support
 
-- 🐛 **Issues**: Create an issue in the repository
-- 📧 **Questions**: Contact the development team
-- 📖 **Documentation**: Check this README and code comments
+- 🐛 **Issues**: Buat issue di repository
+- 📖 **Documentation**: Cek README dan komentar kode
 
 ---
 
-**⚡ Built with Rust for maximum performance and reliability!**
+**⚡ Dibangun dengan Rust untuk performa dan reliabilitas maksimal!**
