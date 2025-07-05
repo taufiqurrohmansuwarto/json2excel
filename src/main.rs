@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::io::Cursor;
 use warp::Filter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -96,24 +95,52 @@ async fn generate_excel_file(req: ExportRequest) -> anyhow::Result<Vec<u8>> {
         worksheet.set_column(col as u16, col as u16, 15.0, None)?;
     }
     
-    // Write data rows
+    // Write data rows (optimized batch processing)
     info!("📝 Writing {} data rows...", req.data.len());
-    for (row_idx, record) in req.data.iter().enumerate() {
-        let excel_row = json_to_excel_row(record, &headers);
-        let row_num = (row_idx + 1) as u32;
+    
+    // Process data in chunks for better memory management
+    const CHUNK_SIZE: usize = 1000;
+    let total_rows = req.data.len();
+    
+    for chunk_start in (0..total_rows).step_by(CHUNK_SIZE) {
+        let chunk_end = std::cmp::min(chunk_start + CHUNK_SIZE, total_rows);
+        let chunk = &req.data[chunk_start..chunk_end];
         
-        for (col, value) in excel_row.iter().enumerate() {
-            // Try to detect if it's a number
-            if let Ok(num) = value.parse::<f64>() {
-                worksheet.write_number(row_num, col as u16, num, None)?;
-            } else {
-                worksheet.write_string(row_num, col as u16, value, None)?;
+        // Pre-process chunk untuk type detection
+        let processed_chunk: Vec<Vec<CellValue>> = chunk
+            .iter()
+            .map(|record| json_to_excel_row_optimized(record, &headers))
+            .collect();
+        
+        // Write chunk ke Excel
+        for (chunk_row_idx, excel_row) in processed_chunk.iter().enumerate() {
+            let row_num = (chunk_start + chunk_row_idx + 1) as u32;
+            
+            for (col, cell_value) in excel_row.iter().enumerate() {
+                let col_idx = col as u16;
+                match cell_value {
+                    CellValue::Empty => {
+                        worksheet.write_blank(row_num, col_idx, None)?;
+                    },
+                    CellValue::String(s) => {
+                        worksheet.write_string(row_num, col_idx, s, None)?;
+                    },
+                    CellValue::Integer(i) => {
+                        worksheet.write_number(row_num, col_idx, *i as f64, None)?;
+                    },
+                    CellValue::Float(f) => {
+                        worksheet.write_number(row_num, col_idx, *f, None)?;
+                    },
+                    CellValue::Bool(b) => {
+                        worksheet.write_boolean(row_num, col_idx, *b, None)?;
+                    },
+                }
             }
         }
         
-        // Log progress every 10000 rows
-        if (row_idx + 1) % 10000 == 0 {
-            info!("📈 Progress: {} / {} rows processed", row_idx + 1, req.data.len());
+        // Log progress
+        if chunk_end % 10000 == 0 || chunk_end == total_rows {
+            info!("📈 Progress: {} / {} rows processed", chunk_end, total_rows);
         }
     }
     
@@ -143,18 +170,49 @@ fn auto_detect_headers(data: &[Value]) -> Vec<String> {
     vec!["data".to_string()] // Fallback
 }
 
-// Convert JSON record ke Excel row
-fn json_to_excel_row(record: &Value, headers: &[String]) -> Vec<String> {
+// Optimized: Convert JSON record ke Excel row dengan type detection
+fn json_to_excel_row_optimized(record: &Value, headers: &[String]) -> Vec<CellValue> {
     headers.iter().map(|header| {
         match &record[header] {
-            Value::Null => "".to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Number(n) => n.to_string(),
-            Value::String(s) => s.clone(),
-            Value::Array(_) => "[Array]".to_string(),
-            Value::Object(_) => "[Object]".to_string(),
+            Value::Null => CellValue::Empty,
+            Value::Bool(b) => CellValue::Bool(*b),
+            Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    CellValue::Integer(i)
+                } else if let Some(f) = n.as_f64() {
+                    CellValue::Float(f)
+                } else {
+                    CellValue::String(n.to_string())
+                }
+            },
+            Value::String(s) => {
+                // Try to detect numbers in strings for better performance
+                if let Ok(f) = s.parse::<f64>() {
+                    if s.contains('.') {
+                        CellValue::Float(f)
+                    } else if let Ok(i) = s.parse::<i64>() {
+                        CellValue::Integer(i)
+                    } else {
+                        CellValue::Float(f)
+                    }
+                } else {
+                    CellValue::String(s.clone())
+                }
+            },
+            Value::Array(_) => CellValue::String("[Array]".to_string()),
+            Value::Object(_) => CellValue::String("[Object]".to_string()),
         }
     }).collect()
+}
+
+// Enum untuk optimized cell values
+#[derive(Debug)]
+enum CellValue {
+    Empty,
+    String(String),
+    Integer(i64),
+    Float(f64),
+    Bool(bool),
 }
 
 // Health check endpoint
@@ -272,7 +330,7 @@ async fn main() {
     // Main Excel generation route
     let generate = warp::path("generate-excel")
         .and(warp::post())
-        .and(warp::body::content_length_limit(1024 * 1024 * 100)) // 100MB limit
+        .and(warp::body::content_length_limit(1024 * 1024 * 500)) // 500MB limit for large datasets
         .and(warp::body::json())
         .and_then(generate_excel_handler);
     
