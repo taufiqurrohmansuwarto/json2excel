@@ -5,6 +5,9 @@ FROM rust:latest AS builder
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
+    build-essential \
+    libclang-dev \
+    clang \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
